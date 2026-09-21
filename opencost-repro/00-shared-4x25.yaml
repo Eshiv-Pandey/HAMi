@@ -1,0 +1,37 @@
+# Milestone 1 workload: four pods, each reserving 25% cores + 25% memory of ONE
+# physical GPU. Under a core-reservation policy the four together must account
+# for exactly one GPU-hour over one hour. Run on a node that exposes a SINGLE
+# physical GPU so HAMi binpack co-locates all four on the same card.
+#
+# Set the node name below to your single-GPU node before applying.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hami-repro-quarter
+  namespace: hami-repro
+  labels:
+    app: hami-repro-quarter
+spec:
+  replicas: 4
+  selector:
+    matchLabels:
+      app: hami-repro-quarter
+  template:
+    metadata:
+      labels:
+        app: hami-repro-quarter
+    spec:
+      # nodeName: <single-gpu-node>   # uncomment and set to pin all replicas
+      restartPolicy: Always
+      containers:
+        - name: burn
+          image: nvcr.io/nvidia/k8s/cuda-sample:vectoradd-cuda11.7.1-ubi8
+          # A steady, light GPU load so runtime utilization is nonzero.
+          command: ["/bin/sh", "-c"]
+          args:
+            - while true; do /cuda-samples/vectorAdd >/dev/null 2>&1 || true; sleep 2; done
+          resources:
+            limits:
+              nvidia.com/gpu: "1"
+              nvidia.com/gpucores: "25"
+              nvidia.com/gpumem-percentage: "25"

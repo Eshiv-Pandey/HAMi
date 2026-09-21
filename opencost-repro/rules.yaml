@@ -1,0 +1,42 @@
+# Recording rules encoding the HAMi + OpenCost fractional GPU accounting.
+# Validated by promtool-tests.yaml. Prices are placeholders: core_price=$2/hr,
+# mem_price=$1/hr, so a fully reserved card costs $3/hr and the reconciliation
+# identity is sum(pod_cost) + card_idle_cost == $3/hr.
+groups:
+  - name: hami-opencost
+    rules:
+      # Per-device total memory (bytes), recovered from the node reservation ratio.
+      - record: hami:gpu_memory_total_bytes
+        expr: |
+          sum by (device_uuid) (hami_gpu_memory_allocated_bytes)
+            / on (device_uuid)
+            sum by (device_uuid) (hami_node_gpu_memory_allocated_ratio)
+
+      # Core dimension (metric is NVIDIA percent 0-100, so divide by 100).
+      - record: hami:pod_core_reserved_fraction
+        expr: sum by (namespace, pod, device_uuid) (hami_vgpu_core_allocated_ratio) / 100
+      - record: hami:card_core_reserved_fraction
+        expr: sum by (device_uuid) (hami_vgpu_core_allocated_ratio) / 100
+      - record: hami:card_core_idle_fraction
+        expr: 1 - clamp_max(sum by (device_uuid) (hami_vgpu_core_allocated_ratio) / 100, 1)
+
+      # Memory dimension.
+      - record: hami:pod_mem_reserved_fraction
+        expr: |
+          sum by (namespace, pod, device_uuid) (hami_vgpu_memory_allocated_bytes)
+            / on (device_uuid) group_left ()
+            hami:gpu_memory_total_bytes
+      - record: hami:card_mem_idle_fraction
+        expr: 1 - clamp_max(sum by (device_uuid) (hami_node_gpu_memory_allocated_ratio), 1)
+
+      # Cost: memory and cores priced separately, then summed.
+      - record: hami:pod_cost_per_hour
+        expr: |
+          2 * hami:pod_core_reserved_fraction
+            + on (namespace, pod, device_uuid)
+            1 * hami:pod_mem_reserved_fraction
+      - record: hami:card_idle_cost_per_hour
+        expr: |
+          2 * hami:card_core_idle_fraction
+            + on (device_uuid)
+            1 * hami:card_mem_idle_fraction

@@ -1,0 +1,33 @@
+# Control case: one pod holding a whole physical GPU (100% cores + 100% memory).
+# Its cost must equal the physical GPU cost with zero idle. Compare the four
+# quarter pods against this baseline.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hami-repro-whole
+  namespace: hami-repro
+  labels:
+    app: hami-repro-whole
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: hami-repro-whole
+  template:
+    metadata:
+      labels:
+        app: hami-repro-whole
+    spec:
+      # nodeName: <another-single-gpu-node>   # keep off the shared card
+      restartPolicy: Always
+      containers:
+        - name: burn
+          image: nvcr.io/nvidia/k8s/cuda-sample:vectoradd-cuda11.7.1-ubi8
+          command: ["/bin/sh", "-c"]
+          args:
+            - while true; do /cuda-samples/vectorAdd >/dev/null 2>&1 || true; sleep 2; done
+          resources:
+            limits:
+              nvidia.com/gpu: "1"
+              nvidia.com/gpucores: "100"
+              nvidia.com/gpumem-percentage: "100"

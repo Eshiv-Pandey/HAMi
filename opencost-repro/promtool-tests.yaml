@@ -1,0 +1,105 @@
+# Validates rules.yaml against synthetic series that mirror the milestone-1
+# workload: device D1 shared by four 25% pods (p1-p4), device D2 held whole by
+# one control pod (p5). Run: promtool test rules promtool-tests.yaml
+rule_files:
+  - rules.yaml
+
+evaluation_interval: 1m
+
+tests:
+  - interval: 1m
+    input_series:
+      # --- Shared card D1: four quarter pods ---
+      - series: 'hami_vgpu_core_allocated_ratio{namespace="hami-repro",node="n1",pod="p1",container_index="0",device_uuid="D1"}'
+        values: '25+0x60'
+      - series: 'hami_vgpu_core_allocated_ratio{namespace="hami-repro",node="n1",pod="p2",container_index="0",device_uuid="D1"}'
+        values: '25+0x60'
+      - series: 'hami_vgpu_core_allocated_ratio{namespace="hami-repro",node="n1",pod="p3",container_index="0",device_uuid="D1"}'
+        values: '25+0x60'
+      - series: 'hami_vgpu_core_allocated_ratio{namespace="hami-repro",node="n1",pod="p4",container_index="0",device_uuid="D1"}'
+        values: '25+0x60'
+      - series: 'hami_vgpu_memory_allocated_bytes{namespace="hami-repro",node="n1",pod="p1",container_index="0",device_uuid="D1"}'
+        values: '4000000000+0x60'
+      - series: 'hami_vgpu_memory_allocated_bytes{namespace="hami-repro",node="n1",pod="p2",container_index="0",device_uuid="D1"}'
+        values: '4000000000+0x60'
+      - series: 'hami_vgpu_memory_allocated_bytes{namespace="hami-repro",node="n1",pod="p3",container_index="0",device_uuid="D1"}'
+        values: '4000000000+0x60'
+      - series: 'hami_vgpu_memory_allocated_bytes{namespace="hami-repro",node="n1",pod="p4",container_index="0",device_uuid="D1"}'
+        values: '4000000000+0x60'
+      - series: 'hami_gpu_memory_allocated_bytes{node="n1",device_uuid="D1",device_index="0",device_cores="100",device_type="NVIDIA"}'
+        values: '16000000000+0x60'
+      - series: 'hami_node_gpu_memory_allocated_ratio{node="n1",device_uuid="D1",device_index="0",device_type="NVIDIA"}'
+        values: '1+0x60'
+
+      # --- Control card D2: one whole-GPU pod ---
+      - series: 'hami_vgpu_core_allocated_ratio{namespace="hami-repro",node="n2",pod="p5",container_index="0",device_uuid="D2"}'
+        values: '100+0x60'
+      - series: 'hami_vgpu_memory_allocated_bytes{namespace="hami-repro",node="n2",pod="p5",container_index="0",device_uuid="D2"}'
+        values: '16000000000+0x60'
+      - series: 'hami_gpu_memory_allocated_bytes{node="n2",device_uuid="D2",device_index="0",device_cores="100",device_type="NVIDIA"}'
+        values: '16000000000+0x60'
+      - series: 'hami_node_gpu_memory_allocated_ratio{node="n2",device_uuid="D2",device_index="0",device_type="NVIDIA"}'
+        values: '1+0x60'
+
+    promql_expr_test:
+      # Milestone-1 identity: the four quarter pods reserve exactly one card.
+      - expr: hami:card_core_reserved_fraction
+        eval_time: 30m
+        exp_samples:
+          - labels: 'hami:card_core_reserved_fraction{device_uuid="D1"}'
+            value: 1
+          - labels: 'hami:card_core_reserved_fraction{device_uuid="D2"}'
+            value: 1
+      - expr: hami:card_core_idle_fraction
+        eval_time: 30m
+        exp_samples:
+          - labels: 'hami:card_core_idle_fraction{device_uuid="D1"}'
+            value: 0
+          - labels: 'hami:card_core_idle_fraction{device_uuid="D2"}'
+            value: 0
+
+      # Per-pod fractions.
+      - expr: hami:pod_core_reserved_fraction{device_uuid="D1"}
+        eval_time: 30m
+        exp_samples:
+          - labels: 'hami:pod_core_reserved_fraction{namespace="hami-repro",pod="p1",device_uuid="D1"}'
+            value: 0.25
+          - labels: 'hami:pod_core_reserved_fraction{namespace="hami-repro",pod="p2",device_uuid="D1"}'
+            value: 0.25
+          - labels: 'hami:pod_core_reserved_fraction{namespace="hami-repro",pod="p3",device_uuid="D1"}'
+            value: 0.25
+          - labels: 'hami:pod_core_reserved_fraction{namespace="hami-repro",pod="p4",device_uuid="D1"}'
+            value: 0.25
+      - expr: hami:pod_mem_reserved_fraction{device_uuid="D1"}
+        eval_time: 30m
+        exp_samples:
+          - labels: 'hami:pod_mem_reserved_fraction{namespace="hami-repro",pod="p1",device_uuid="D1"}'
+            value: 0.25
+          - labels: 'hami:pod_mem_reserved_fraction{namespace="hami-repro",pod="p2",device_uuid="D1"}'
+            value: 0.25
+          - labels: 'hami:pod_mem_reserved_fraction{namespace="hami-repro",pod="p3",device_uuid="D1"}'
+            value: 0.25
+          - labels: 'hami:pod_mem_reserved_fraction{namespace="hami-repro",pod="p4",device_uuid="D1"}'
+            value: 0.25
+
+      # Per-pod cost: core_price*core_frac + mem_price*mem_frac.
+      - expr: hami:pod_cost_per_hour{device_uuid="D1"}
+        eval_time: 30m
+        exp_samples:
+          - labels: 'hami:pod_cost_per_hour{namespace="hami-repro",pod="p1",device_uuid="D1"}'
+            value: 0.75
+          - labels: 'hami:pod_cost_per_hour{namespace="hami-repro",pod="p2",device_uuid="D1"}'
+            value: 0.75
+          - labels: 'hami:pod_cost_per_hour{namespace="hami-repro",pod="p3",device_uuid="D1"}'
+            value: 0.75
+          - labels: 'hami:pod_cost_per_hour{namespace="hami-repro",pod="p4",device_uuid="D1"}'
+            value: 0.75
+
+      # Reconciliation: sum(pod_cost) + idle_cost == full-card price ($3/hr).
+      - expr: sum by (device_uuid) (hami:pod_cost_per_hour) + on (device_uuid) hami:card_idle_cost_per_hour
+        eval_time: 30m
+        exp_samples:
+          - labels: '{device_uuid="D1"}'
+            value: 3
+          - labels: '{device_uuid="D2"}'
+            value: 3

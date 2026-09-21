@@ -1,0 +1,74 @@
+# =============================================================================
+# HAMi + OpenCost fractional GPU accounting: reproduction queries
+#
+# UNITS (verified against source, HAMi 2.10.0):
+#   hami_vgpu_core_allocated_ratio       NVIDIA: percent 0-100 (NOT 0-1).
+#                                        cmd/scheduler/metrics.go, value = Usedcores.
+#   hami_container_device_utilization_ratio  SM utilization percent 0-100.
+#   hami_vgpu_memory_allocated_bytes     reservation, bytes.
+#   hami_vgpu_memory_used_bytes          runtime, bytes.
+#   hami_node_gpu_memory_allocated_ratio node-level memory reservation, 0-1.
+#
+# Reservation metrics come from the scheduler filter phase (no pod UID, and a
+# reservation is not proof the pod ran). Use them for the shared-card total and
+# idle. Use the vGPUmonitor runtime series for per-pod billing.
+#
+# Join to workloads / pod lifetime is done in OpenCost via kube-state-metrics on
+# (namespace, pod, container, node). HAMi already exposes those label keys, so no
+# pod_uid label is required on HAMi metrics for the join (see README).
+# =============================================================================
+
+# --- A. Core dimension, RESERVATION (the milestone-1 target) -----------------
+
+# A1. Per-pod reserved core fraction of the physical card (0-1).
+sum by (namespace, pod, device_uuid) (hami_vgpu_core_allocated_ratio) / 100
+
+# A2. Shared-card total reserved core fraction. For the four quarter pods this
+#     must equal 1.0 (idle 0); the whole-GPU control also equals 1.0.
+sum by (device_uuid) (hami_vgpu_core_allocated_ratio) / 100
+
+# A3. Idle (unreserved) core fraction of the card.
+1 - clamp_max(sum by (device_uuid) (hami_vgpu_core_allocated_ratio) / 100, 1)
+
+# A4. Reserved core GPU-hours over the window (constant gauge -> avg * hours).
+#     sum over pods + idle == 1.0 GPU-hour per physical card. This is the
+#     reconciliation identity for the core dimension.
+avg_over_time((sum by (device_uuid) (hami_vgpu_core_allocated_ratio) / 100)[1h:])
+
+
+# --- B. Core dimension, MEASURED (runtime, for contrast) ---------------------
+
+# B1. Per-pod measured compute fraction actually used (0-1). Will NOT sum to
+#     1.0; the gap is real idle inside reserved slices. This is the honest
+#     "measured" basis vs the reservation basis in A.
+avg_over_time(hami_container_device_utilization_ratio[1h]) / 100
+
+
+# --- C. Memory dimension -----------------------------------------------------
+#
+# Per-device total memory (bytes) is recovered from the node reservation series
+# via the hami:gpu_memory_total_bytes recording rule in rules.yaml:
+#   sum by (device_uuid) (hami_gpu_memory_allocated_bytes)
+#     / on (device_uuid) sum by (device_uuid) (hami_node_gpu_memory_allocated_ratio)
+
+# C1. Per-pod reserved memory fraction of the card (0-1).
+sum by (namespace, pod, device_uuid) (hami_vgpu_memory_allocated_bytes)
+  / on (device_uuid) group_left ()
+  hami:gpu_memory_total_bytes
+
+# C2. Per-pod measured memory fraction actually used (runtime, 0-1).
+sum by (namespace, pod, device_uuid) (avg_over_time(hami_vgpu_memory_used_bytes[1h]))
+  / on (device_uuid) group_left ()
+  hami:gpu_memory_total_bytes
+
+
+# --- D. Cost: memory and cores priced SEPARATELY, summed ---------------------
+#
+#   pod_cost/hr = core_price/hr * core_fraction + mem_price/hr * mem_fraction
+#   sum(pod_cost) + idle_cost == physical_gpu_price/hr        (reconciliation)
+#
+# Set the two recording-rule constants to your prices, then:
+#
+#   (D uses A1/C1 for the reservation policy, or B1/C2 for the measured policy.)
+#
+# core_price:CONST * ( <A1 or B1> )  +  mem_price:CONST * ( <C1 or C2> )
