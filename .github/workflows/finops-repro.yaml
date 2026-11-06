@@ -1,0 +1,49 @@
+name: FinOps reproduction CPU checks
+
+on:
+  push:
+    paths:
+      - opencost-repro/**
+      - .github/workflows/finops-repro.yaml
+  pull_request:
+    paths:
+      - opencost-repro/**
+      - .github/workflows/finops-repro.yaml
+
+permissions:
+  contents: read
+
+jobs:
+  cpu-checks:
+    name: Python ${{ matrix.python-version }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.13"]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Setup Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Accounting and mocked capture tests
+        run: python -m unittest discover -s opencost-repro -p 'test_*.py' -v
+      - name: Compile Python and validate wrappers
+        run: |
+          python -m compileall -q opencost-repro
+          bash -n opencost-repro/setup.sh opencost-repro/run.sh
+          bash opencost-repro/setup.sh --help
+          bash opencost-repro/run.sh --help
+      - name: Render both workload profiles without a cluster
+        run: |
+          for profile in shared whole; do
+            python opencost-repro/runner.py prepare \
+              --namespace hami-finops-${profile} --node gpu-a \
+              --uuid GPU-00000000-0000-0000-0000-000000000001 \
+              --profile "${profile}" --out "${RUNNER_TEMP}/finops-${profile}"
+          done
