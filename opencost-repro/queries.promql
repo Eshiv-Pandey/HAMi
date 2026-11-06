@@ -1,0 +1,22 @@
+# Diagnostic source queries. These are not deployable billing rules.
+# Runtime metrics omit node and Pod UID. The capture program corroborates
+# their source timestamps with actual binding and stable Kubernetes identity.
+
+# Direct physical memory capacity; never allocated bytes / allocated fraction.
+max by (node, device_uuid) (hami_gpu_memory_limit_bytes)
+
+# NVIDIA core reservations are percent 0-100, not fractions 0-1.
+# max deduplicates matching scrapes without adding duplicate reservations.
+max by (namespace, node, pod, device_uuid) (hami_vgpu_core_allocated_ratio)
+
+max by (namespace, node, pod, device_uuid) (hami_vgpu_memory_allocated_bytes)
+
+# Inspect runtime and Kubernetes identity separately; presence alone does not
+# establish a billable running window.
+hami_container_device_utilization_ratio
+timestamp(hami_container_device_utilization_ratio)
+kube_pod_info
+
+# This rate may already be replica-adjusted by OpenCost. Preserve node labels
+# and physical/virtual counts before normalizing it to a physical-card price.
+node_gpu_hourly_cost

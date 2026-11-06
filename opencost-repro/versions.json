@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "platform": "linux/amd64",
+  "scrape_interval_seconds": 15,
+  "opencost_query_resolution_seconds": 60,
+  "components": {
+    "hami": {
+      "version": "v2.11.0",
+      "repository": "projecthami/hami",
+      "image": "projecthami/hami@sha256:caa49b5f2228c0a6edefd8b1f7cf9b564ca95aed817aeb3cdfa7befddd240334",
+      "config_digest": "sha256:cd2d495252adfb2ae644bcc4acd0cc0c59a09857e38f596555381531aaa32d6b"
+    },
+    "opencost": {
+      "version": "1.121.3",
+      "repository": "ghcr.io/opencost/opencost",
+      "image": "ghcr.io/opencost/opencost@sha256:150e1551a1f5281ec51a165cc294b7453259d0b1d0b51992ba6d952e7fe2051b",
+      "config_digest": "sha256:352cabc4a598126be44a32fc591b415e46be848758585ffc4c0d888c9b37b368"
+    },
+    "prometheus": {
+      "version": "3.2.1",
+      "repository": "prom/prometheus",
+      "image": "prom/prometheus@sha256:5d34817348f69ddb956be509cafa4d4c2b5ecbbb5b786dd99d5a62e686b2ece4",
+      "config_digest": "sha256:503e04849f1c820b73ed19f348cb8da0c9728f38b6a4f68eb68d8c3eb0e1869f"
+    },
+    "kube-state-metrics": {
+      "version": "2.15.0",
+      "repository": "registry.k8s.io/kube-state-metrics/kube-state-metrics",
+      "image": "registry.k8s.io/kube-state-metrics/kube-state-metrics@sha256:d9760cb88c96b59bfab6a3586064b204b5234b6ad07bec2667ca37f797a519ff",
+      "config_digest": "sha256:8650a5270cac27775505014f40150e948b78ed474379ebcf3ab3a1da9402e71d"
+    },
+    "workload": {
+      "version": "2.5.1-cuda12.1-cudnn9-runtime",
+      "repository": "pytorch/pytorch",
+      "image": "pytorch/pytorch@sha256:831247999fbf7e08f61b3e39f6d77ee434f38f6f07f769d00db451e853878067",
+      "config_digest": "sha256:048a0de5d4322054f9d92a9dfd36f4cab1cd82dfbd1042ce2c51bd94f7e45d32"
+    }
+  }
+}
